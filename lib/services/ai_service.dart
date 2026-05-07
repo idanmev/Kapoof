@@ -15,9 +15,12 @@ class AIService {
   // Voice-parser model: returns strict JSON, no markdown
   final GenerativeModel _parserModel;
 
+  // Image-generation model: thumbnail previews
+  final GenerativeModel _imageModel;
+
   AIService()
       : _contentModel = GenerativeModel(
-          model: 'gemini-2.5-flash-preview-05-20',
+          model: 'gemini-3.1-pro-preview',
           apiKey: _apiKey,
           systemInstruction: Content.system('''
 You are a magical creative engine for children aged 5-8.
@@ -37,7 +40,7 @@ Visual rules:
 '''),
         ),
         _parserModel = GenerativeModel(
-          model: 'gemini-2.0-flash-001',
+          model: 'gemini-3-flash-preview',
           apiKey: _apiKey,
           systemInstruction: Content.system('''
 You are a magical interpreter for young children aged 5-8.
@@ -73,6 +76,10 @@ Return ONLY valid JSON, no markdown, no explanation:
   "summary_for_kid": "One sentence in excited kid language reflecting EXACTLY what they said back to them, using their own words. Start with OK SO..."
 }
 '''),
+        ),
+        _imageModel = GenerativeModel(
+          model: 'gemini-2.5-flash-image',
+          apiKey: _apiKey,
         );
 
   // ─── Voice Parser ──────────────────────────────────────────────────────────
@@ -237,7 +244,20 @@ Requirements:
 
   // ─── Thumbnail ─────────────────────────────────────────────────────────────
 
-  // Thumbnail generation intentionally disabled — Imagen requires Vertex AI.
-  // The ResultScreen handles null gracefully with a colour placeholder.
-  Future<Uint8List?> generateThumbnail(String description) async => null;
+  Future<Uint8List?> generateThumbnail(String description) async {
+    try {
+      final prompt =
+          "Cute colorful cartoon illustration for a children's app: $description. "
+          "Pixar style, bright colors, white background, simple shapes, age 5-8.";
+      final response =
+          await _imageModel.generateContent([Content.text(prompt)]);
+      for (final part in response.candidates.first.content.parts) {
+        if (part is DataPart) return part.bytes;
+      }
+      return null;
+    } catch (e) {
+      debugPrint('Thumbnail generation error: $e');
+      return null;
+    }
+  }
 }
