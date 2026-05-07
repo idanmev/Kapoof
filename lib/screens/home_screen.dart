@@ -25,6 +25,11 @@ class HomeScreen extends StatelessWidget {
             ),
             child: Column(
               children: [
+                Image.asset(
+                  'assets/logo.png',
+                  height: isTablet ? 90.0 : 120.0,
+                ),
+                SizedBox(height: isTablet ? 16.0 : 20.0),
                 Text(
                   'What will you make today?',
                   textAlign: TextAlign.center,
@@ -117,13 +122,9 @@ class HomeScreen extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              'Kapoof',
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: isTablet ? 24.0 : 30.0,
-                fontWeight: FontWeight.w800,
-                color: AppColors.secondary,
-              ),
+            Image.asset(
+              'assets/logo.png',
+              height: isTablet ? 36.0 : 44.0,
             ),
             Row(
               children: [

@@ -211,13 +211,9 @@ class _ResultScreenState extends State<ResultScreen>
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              'Kapoof',
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: isTablet ? 24.0 : 30.0,
-                fontWeight: FontWeight.w800,
-                color: AppColors.secondary,
-              ),
+            Image.asset(
+              'assets/logo.png',
+              height: isTablet ? 36.0 : 44.0,
             ),
             Row(
               children: [

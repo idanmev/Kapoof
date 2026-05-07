@@ -161,12 +161,21 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     final bigEmojiSize = isTablet ? 80.0 : 110.0;
     final smallEmojiSize = isTablet ? 46.0 : 64.0;
 
+    // First slide uses the logo image instead of emoji box
+    final isFirstSlide = slide.emoji2 == null && slide.emoji == '🪄';
+
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: isTablet ? 56.0 : 36.0),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Container(
+          if (isFirstSlide)
+            Image.asset(
+              'assets/logo.png',
+              height: isTablet ? 160.0 : 200.0,
+            )
+          else
+            Container(
             width: imageSize,
             height: imageSize,
             decoration: BoxDecoration(

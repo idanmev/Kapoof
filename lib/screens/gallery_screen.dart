@@ -112,13 +112,19 @@ class GalleryScreen extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Text(
-              'My Creations ✨',
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: isTablet ? 22.0 : 28.0,
-                fontWeight: FontWeight.w800,
-                color: AppColors.secondary,
-              ),
+            Row(
+              children: [
+                Image.asset('assets/logo.png', height: isTablet ? 36.0 : 44.0),
+                SizedBox(width: isTablet ? 10.0 : 12.0),
+                Text(
+                  'My Creations ✨',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: isTablet ? 20.0 : 24.0,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.secondary,
+                  ),
+                ),
+              ],
             ),
           ],
         ),
