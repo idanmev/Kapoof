@@ -20,7 +20,7 @@ class AIService {
 
   AIService()
       : _contentModel = GenerativeModel(
-          model: 'gemini-3.1-pro-preview',
+          model: 'gemini-2.5-flash',
           apiKey: _apiKey,
           systemInstruction: Content.system('''
 You are a magical creative engine for children aged 5-8.
@@ -40,7 +40,7 @@ Visual rules:
 '''),
         ),
         _parserModel = GenerativeModel(
-          model: 'gemini-3-flash-preview',
+          model: 'gemini-2.0-flash',
           apiKey: _apiKey,
           systemInstruction: Content.system('''
 You are a magical interpreter for young children aged 5-8.
@@ -237,8 +237,13 @@ Requirements:
     
     final response =
         await _contentModel.generateContent([Content.text(finalPrompt)]);
-    final responseText = response.text ?? '';
-    debugPrint('KAPOOF RESPONSE: $responseText');
+    final raw = response.text ?? '';
+    // Strip markdown code fences if the model wraps its output
+    final responseText = raw
+        .replaceAll(RegExp(r'^```html?\s*', multiLine: true), '')
+        .replaceAll(RegExp(r'^```\s*$', multiLine: true), '')
+        .trim();
+    debugPrint('KAPOOF RESPONSE length: ${responseText.length}');
     return responseText;
   }
 

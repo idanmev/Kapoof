@@ -96,9 +96,13 @@ class _ResultScreenState extends State<ResultScreen>
         _aiService.generateThumbnail(description),
       ]);
 
+      final html = futures[0] as String;
+      if (html.trim().isEmpty) {
+        throw Exception('Model returned empty content');
+      }
       if (mounted) {
         setState(() {
-          _generatedHtml = futures[0] as String;
+          _generatedHtml = html;
           _thumbnailBytes ??= futures[1] as Uint8List?;
           _isLoading = false;
           _spinController.stop();
