@@ -4,6 +4,11 @@ import 'package:kapoof/widgets/neobrutalist_widgets.dart';
 import 'dart:math' as math;
 
 import 'package:google_fonts/google_fonts.dart';
+import 'package:kapoof/screens/format_chooser_screen.dart';
+import 'package:kapoof/screens/learning_screen.dart';
+import 'package:kapoof/screens/settings_screen.dart';
+import 'package:kapoof/screens/teacher_mode_screen.dart';
+import 'package:kapoof/screens/website_mode_screen.dart';
 import 'package:kapoof/screens/wizard_screen.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -44,12 +49,12 @@ class HomeScreen extends StatelessWidget {
                 SizedBox(height: isTablet ? 32.0 : 48.0),
 
                 GridView.count(
-                  crossAxisCount: isTablet ? 3 : 1,
+                  crossAxisCount: isTablet ? 3 : 2,
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  mainAxisSpacing: isTablet ? 20.0 : 32.0,
-                  crossAxisSpacing: isTablet ? 20.0 : 32.0,
-                  childAspectRatio: isTablet ? 1.2 : 1.15,
+                  mainAxisSpacing: isTablet ? 20.0 : 20.0,
+                  crossAxisSpacing: isTablet ? 20.0 : 20.0,
+                  childAspectRatio: isTablet ? 1.2 : 1.0,
                   children: [
                     _buildPortalCard(
                       context: context,
@@ -80,6 +85,26 @@ class HomeScreen extends StatelessWidget {
                       textColor: AppColors.onSecondaryContainer,
                       icon: Icons.palette,
                       iconColor: AppColors.secondary,
+                    ),
+                    _buildPortalCard(
+                      context: context,
+                      isTablet: isTablet,
+                      emoji: '🌐',
+                      label: 'Build a Website',
+                      color: AppColors.tertiaryContainer,
+                      textColor: AppColors.onTertiaryContainer,
+                      icon: Icons.language,
+                      iconColor: AppColors.tertiary,
+                    ),
+                    _buildPortalCard(
+                      context: context,
+                      isTablet: isTablet,
+                      emoji: '🎓',
+                      label: 'Learn Something',
+                      color: AppColors.primaryContainer,
+                      textColor: AppColors.onPrimaryContainer,
+                      icon: Icons.lightbulb,
+                      iconColor: AppColors.primary,
                     ),
                   ],
                 ),
@@ -131,19 +156,29 @@ class HomeScreen extends StatelessWidget {
                 NeobrutalistButton(
                   size: isTablet ? 42.0 : 52.0,
                   backgroundColor: AppColors.primaryContainer,
-                  child: Icon(Icons.star,
+                  child: Icon(Icons.settings,
                       color: AppColors.primary,
                       size: isTablet ? 20.0 : 26.0),
-                  onTap: () {},
+                  onTap: () {
+                    Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) => const SettingsScreen(),
+                    ));
+                  },
                 ),
                 SizedBox(width: isTablet ? 10.0 : 12.0),
                 NeobrutalistButton(
                   size: isTablet ? 42.0 : 52.0,
                   backgroundColor: AppColors.tertiaryContainer,
-                  child: Icon(Icons.auto_awesome,
+                  child: Icon(Icons.school,
                       color: AppColors.onTertiaryContainer,
                       size: isTablet ? 20.0 : 26.0),
-                  onTap: () {},
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const TeacherModeScreen(),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
@@ -217,14 +252,36 @@ class HomeScreen extends StatelessWidget {
       shadowOffset: isTablet ? 5.0 : 8.0,
       padding: EdgeInsets.all(isTablet ? 16.0 : 20.0),
       onTap: () {
+        if (label.contains('Website')) {
+          Navigator.of(context).push(MaterialPageRoute(
+            builder: (_) => const WebsiteModeScreen(),
+          ));
+          return;
+        }
+        if (label.contains('Learn')) {
+          Navigator.of(context).push(MaterialPageRoute(
+            builder: (_) => const LearningScreen(),
+          ));
+          return;
+        }
+
         String type = 'dartgame';
         if (label.contains('Story')) type = 'story';
         if (label.contains('Draw')) type = 'drawing';
 
-        Navigator.of(context).push(
-          MaterialPageRoute(
-              builder: (context) => WizardScreen(creationType: type)),
-        );
+        if (type == 'drawing' || type == 'story') {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => FormatChooserScreen(creationType: type),
+            ),
+          );
+        } else {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => WizardScreen(creationType: type),
+            ),
+          );
+        }
       },
       child: Stack(
         children: [

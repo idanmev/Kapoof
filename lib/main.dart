@@ -5,6 +5,7 @@ import 'package:kapoof/core/theme.dart';
 import 'package:kapoof/screens/home_screen.dart';
 import 'package:kapoof/screens/gallery_screen.dart';
 import 'package:kapoof/screens/onboarding_screen.dart';
+import 'package:kapoof/services/app_settings.dart';
 // import 'package:kapoof/services/firebase_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -14,6 +15,7 @@ Future<void> main() async {
   // await Firebase.initializeApp();
   // await FirebaseService().ensureAnonymousAuth();
 
+  await AppSettings.instance.load();
   final prefs = await SharedPreferences.getInstance();
   final onboardingComplete = prefs.getBool('onboarding_complete') ?? false;
 
@@ -121,30 +123,33 @@ class _MainShellState extends State<MainShell> {
                 boxShadow: AppTheme.shadow(offset: 3),
               )
             : null,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              size: iconSize,
-              color: isActive
-                  ? AppColors.onSecondaryContainer
-                  : AppColors.onPrimaryContainer,
-            ),
-            const SizedBox(height: 3),
-            Text(
-              label,
-              style: TextStyle(
-                fontFamily: 'Lexend',
-                fontSize: fontSize,
-                fontWeight: FontWeight.w700,
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: iconSize,
                 color: isActive
                     ? AppColors.onSecondaryContainer
                     : AppColors.onPrimaryContainer,
               ),
-            ),
-          ],
+              const SizedBox(height: 3),
+              Text(
+                label,
+                style: TextStyle(
+                  fontFamily: 'Lexend',
+                  fontSize: fontSize,
+                  fontWeight: FontWeight.w700,
+                  color: isActive
+                      ? AppColors.onSecondaryContainer
+                      : AppColors.onPrimaryContainer,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

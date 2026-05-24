@@ -12,10 +12,12 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 class WizardScreen extends StatefulWidget {
   final String creationType;
+  final OutputFormat format;
 
   const WizardScreen({
     super.key,
     required this.creationType,
+    this.format = OutputFormat.interactive,
   });
 
   @override
@@ -160,6 +162,7 @@ class _WizardScreenState extends State<WizardScreen> {
     final state = WizardState(
       creationType: widget.creationType,
       answers: parsedInput != null ? parsedInput.toWizardAnswers() : _answers,
+      format: widget.format,
     );
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
@@ -325,66 +328,112 @@ class _WizardScreenState extends State<WizardScreen> {
                     ),
                     SizedBox(height: isTablet ? 20.0 : 28.0),
 
-                    // Voice button
-                    NeobrutalistButton(
-                      isCircle: false,
-                      size: isTablet ? 68.0 : 88.0,
-                      backgroundColor: _isParsing
-                          ? AppColors.tertiaryContainer
-                          : _isListening
-                              ? AppColors.errorContainer
-                              : AppColors.primaryContainer,
+                    // BIG voice button — primary input
+                    GestureDetector(
                       onTap: _isParsing ? null : _listen,
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(
-                            horizontal: isTablet ? 20.0 : 24.0),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Container(
-                              padding: EdgeInsets.all(isTablet ? 6.0 : 8.0),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                    color: AppColors.onBackground,
-                                    width: isTablet ? 1.5 : 2.0),
-                              ),
-                              child: _isParsing
-                                  ? SizedBox(
-                                      width: isTablet ? 22.0 : 28.0,
-                                      height: isTablet ? 22.0 : 28.0,
-                                      child: const CircularProgressIndicator(
-                                          strokeWidth: 2.5,
-                                          color: AppColors.secondary),
-                                    )
-                                  : Icon(
-                                      _isListening ? Icons.stop : Icons.mic,
-                                      color: _isListening
-                                          ? AppColors.error
-                                          : AppColors.secondary,
-                                      size: isTablet ? 22.0 : 28.0,
-                                    ),
-                            ),
-                            SizedBox(width: isTablet ? 12.0 : 14.0),
-                            Text(
-                              _isParsing
-                                  ? 'Understanding you... 🧠'
-                                  : _isListening
-                                      ? "I'm listening..."
-                                      : 'Tell me! 🎤',
-                              style: GoogleFonts.plusJakartaSans(
-                                fontSize: isTablet ? 17.0 : 22.0,
-                                fontWeight: FontWeight.w800,
+                      child: TweenAnimationBuilder<double>(
+                        tween: Tween(begin: 0.95, end: 1.05),
+                        duration: const Duration(milliseconds: 800),
+                        curve: Curves.easeInOut,
+                        builder: (context, scale, child) {
+                          final pulseScale = _isListening || _isParsing
+                              ? 1.0
+                              : scale;
+                          return Transform.scale(
+                            scale: pulseScale,
+                            child: child,
+                          );
+                        },
+                        onEnd: () => setState(() {}),
+                        child: Container(
+                          width: isTablet ? 180.0 : 200.0,
+                          height: isTablet ? 180.0 : 200.0,
+                          decoration: BoxDecoration(
+                            color: _isParsing
+                                ? AppColors.tertiaryContainer
+                                : _isListening
+                                    ? AppColors.errorContainer
+                                    : AppColors.primaryContainer,
+                            shape: BoxShape.circle,
+                            border: Border.all(
                                 color: AppColors.onBackground,
+                                width: isTablet ? 4.0 : 5.0),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppColors.onBackground,
+                                offset: Offset(
+                                    isTablet ? 6.0 : 8.0, isTablet ? 6.0 : 8.0),
+                                blurRadius: 0,
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
+                          child: Center(
+                            child: _isParsing
+                                ? SizedBox(
+                                    width: isTablet ? 60.0 : 70.0,
+                                    height: isTablet ? 60.0 : 70.0,
+                                    child: const CircularProgressIndicator(
+                                        strokeWidth: 5,
+                                        color: AppColors.secondary),
+                                  )
+                                : Icon(
+                                    _isListening ? Icons.stop : Icons.mic,
+                                    color: _isListening
+                                        ? AppColors.error
+                                        : AppColors.secondary,
+                                    size: isTablet ? 90.0 : 110.0,
+                                  ),
+                          ),
                         ),
                       ),
                     ),
+                    SizedBox(height: isTablet ? 12.0 : 16.0),
+                    Text(
+                      _isParsing
+                          ? 'Understanding you... 🧠'
+                          : _isListening
+                              ? "I'm listening... ✨"
+                              : 'Tap & tell me! 🎤',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: isTablet ? 18.0 : 22.0,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.onBackground,
+                      ),
+                    ),
 
-                    SizedBox(height: isTablet ? 24.0 : 36.0),
+                    SizedBox(height: isTablet ? 24.0 : 32.0),
+
+                    // Subtle divider — voice is primary, picking is fallback
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Container(
+                            height: 2,
+                            color: AppColors.onBackground.withValues(alpha: 0.15),
+                          ),
+                        ),
+                        Padding(
+                          padding: EdgeInsets.symmetric(
+                              horizontal: isTablet ? 14.0 : 18.0),
+                          child: Text(
+                            'or pick one',
+                            style: GoogleFonts.lexend(
+                              fontSize: isTablet ? 11.0 : 13.0,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.onBackground.withValues(alpha: 0.55),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: Container(
+                            height: 2,
+                            color: AppColors.onBackground.withValues(alpha: 0.15),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    SizedBox(height: isTablet ? 18.0 : 24.0),
 
                     // Option cards grid — 4 cols on tablet, 2 on phone
                     GridView.builder(

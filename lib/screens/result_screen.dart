@@ -1,16 +1,21 @@
+import 'package:flutter/foundation.dart' show Uint8List, kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kapoof/core/theme.dart';
 import 'package:kapoof/models/parsed_kid_input.dart';
 import 'package:kapoof/models/wizard_model.dart';
 import 'package:kapoof/screens/play_screen.dart';
 import 'package:kapoof/services/ai_service.dart';
+import 'package:kapoof/services/app_settings.dart';
+import 'package:kapoof/utils/html_renderer.dart' as html_renderer;
 import 'package:kapoof/widgets/kid_error_widget.dart';
 import 'package:kapoof/widgets/neobrutalist_widgets.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:webview_flutter/webview_flutter.dart';
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
+
 
 class ResultScreen extends StatefulWidget {
   final WizardState wizardState;
@@ -27,7 +32,7 @@ class ResultScreen extends StatefulWidget {
 }
 
 class _ResultScreenState extends State<ResultScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   final AIService _aiService = AIService();
   final stt.SpeechToText _speech = stt.SpeechToText();
   final TextEditingController _promptController = TextEditingController();
@@ -35,10 +40,18 @@ class _ResultScreenState extends State<ResultScreen>
   bool _isLoading = true;
   bool _isListening = false;
   String _generatedHtml = '';
-  Uint8List? _thumbnailBytes;
+  Uint8List? _generatedImage;
+  WebViewController? _previewController;
   final List<String> _followUps = [];
+  final List<_Version> _history = [];
+  int _historyIndex = -1;
+
+  bool get _isImageMode =>
+      widget.wizardState.format == OutputFormat.picture ||
+      widget.wizardState.format == OutputFormat.coloring;
 
   late AnimationController _spinController;
+  late AnimationController _kapoofController;
 
   final List<String> _loadingMessages = [
     "Mixing your ingredients... 🧪",
@@ -58,12 +71,17 @@ class _ResultScreenState extends State<ResultScreen>
       vsync: this,
       duration: const Duration(seconds: 2),
     );
+    _kapoofController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
     _startGeneration();
   }
 
   @override
   void dispose() {
     _spinController.dispose();
+    _kapoofController.dispose();
     _loadingTimer?.cancel();
     _promptController.dispose();
     super.dispose();
@@ -85,29 +103,54 @@ class _ResultScreenState extends State<ResultScreen>
     });
 
     try {
-      final description = widget.parsedInput?.summaryForKid ??
-          widget.wizardState.answers.values.join(' ');
-      final futures = await Future.wait([
-        _aiService.generateContent(
-          widget.wizardState,
-          followUps: _followUps,
-          parsedInput: widget.parsedInput,
-        ),
-        _aiService.generateThumbnail(description),
-      ]);
+      if (_isImageMode) {
+        final bytes = widget.wizardState.format == OutputFormat.coloring
+            ? await _aiService.generateColoringPage(widget.wizardState,
+                parsedInput: widget.parsedInput)
+            : await _aiService.generateImage(widget.wizardState,
+                parsedInput: widget.parsedInput);
+        if (mounted) {
+          setState(() {
+            _generatedImage = bytes;
+            _pushHistory('image:${bytes.length}');
+            _cachedSuggestions = null;
+            _isLoading = false;
+            _spinController.stop();
+            _loadingTimer?.cancel();
+          });
+          _kapoofController.forward(from: 0);
+        }
+        return;
+      }
 
-      final html = futures[0] as String;
+      final html = widget.wizardState.format == OutputFormat.webpage
+          ? await _aiService.generateWebpage(widget.wizardState,
+              parsedInput: widget.parsedInput)
+          : await _aiService.generateContent(
+              widget.wizardState,
+              followUps: _followUps,
+              parsedInput: widget.parsedInput,
+            );
+
       if (html.trim().isEmpty) {
         throw Exception('Model returned empty content');
       }
+
       if (mounted) {
         setState(() {
           _generatedHtml = html;
-          _thumbnailBytes ??= futures[1] as Uint8List?;
+          if (!kIsWeb) {
+            _previewController = WebViewController()
+              ..setJavaScriptMode(JavaScriptMode.unrestricted)
+              ..loadHtmlString(html);
+          }
+          _pushHistory(html);
+          _cachedSuggestions = null;
           _isLoading = false;
           _spinController.stop();
           _loadingTimer?.cancel();
         });
+        _kapoofController.forward(from: 0);
       }
     } catch (e) {
       debugPrint("Error generating content: $e");
@@ -120,6 +163,404 @@ class _ResultScreenState extends State<ResultScreen>
         });
       }
     }
+  }
+
+  static const Map<String, List<String>> _remixPool = {
+    'story': [
+      '🐉 Add a dragon', '😂 Make it funnier', '✨ Add more magic',
+      '🌈 Change the colors', '🎵 Add a song', '👻 Add a spooky surprise',
+      '🦄 Add a unicorn friend', '🌙 Make it night time', '☀️ Make it sunny',
+      '🎂 Add a birthday', '🐱 Add a talking cat', '🚀 Add a rocket trip',
+      '🍕 Add yummy food', '👑 Add a king or queen', '🌊 Add the ocean',
+      '⛄ Make it snowy', '🎪 Add a circus', '🦖 Add a dinosaur',
+      '🧙 Add a wizard', '🎈 Add lots of balloons', '💖 Make it sweeter',
+      '🌟 Bigger ending',
+    ],
+    'dartgame': [
+      '⚡ Make it faster', '🎯 Harder enemies', '🏆 Bigger rewards',
+      '🌟 New super power', '🎨 Change the look', '🚀 Add a rocket',
+      '💣 Add bombs', '🛡️ Add a shield', '👻 Spooky enemies',
+      '🦖 Dinosaur enemies', '🍎 Add fruit to collect', '⏱️ Add a timer',
+      '🏰 Add a boss fight', '🎁 Surprise gift drops', '🌈 Rainbow mode',
+      '🔥 Fire trail', '❄️ Freeze enemies', '⚔️ Add a sword',
+      '🎵 Add music', '🌙 Night level', '🎪 Carnival theme',
+      '🎉 Easier mode',
+    ],
+    'drawing': [
+      '🌈 More colors', '✨ More sparkles', '🎵 Add sounds',
+      '🦄 Add a unicorn', '🎉 Make it party!', '🐉 Add a dragon',
+      '🌊 Add bubbles', '⭐ Add stars', '🌸 Add flowers',
+      '🌙 Make it night', '☀️ Make it sunny', '⛄ Make it snowy',
+      '🎈 Add balloons', '❤️ Add hearts', '🎆 Add fireworks',
+      '🐠 Add fish', '🦋 Add butterflies', '🍭 Add candy',
+      '👻 Add a ghost', '🤖 Add a robot', '🎂 Add a cake',
+      '🌀 Make it spin', '💥 Make it explode',
+    ],
+  };
+
+  List<String>? _cachedSuggestions;
+  List<String> _remixSuggestions() {
+    if (_cachedSuggestions != null) return _cachedSuggestions!;
+    final type = widget.wizardState.creationType;
+    final pool = List<String>.from(_remixPool[type] ?? _remixPool['drawing']!);
+    pool.shuffle();
+    _cachedSuggestions = pool.take(8).toList();
+    return _cachedSuggestions!;
+  }
+
+  void _pushHistory(String html) {
+    if (_historyIndex < _history.length - 1) {
+      _history.removeRange(_historyIndex + 1, _history.length);
+    }
+    _history.add(_Version(html, List.from(_followUps)));
+    if (_history.length > 5) _history.removeAt(0);
+    _historyIndex = _history.length - 1;
+  }
+
+  void _restoreVersion(int index) {
+    final v = _history[index];
+    setState(() {
+      _historyIndex = index;
+      _generatedHtml = v.html;
+      _followUps
+        ..clear()
+        ..addAll(v.followUps);
+      if (!kIsWeb) {
+        _previewController = WebViewController()
+          ..setJavaScriptMode(JavaScriptMode.unrestricted)
+          ..loadHtmlString(v.html);
+      }
+    });
+  }
+
+  bool get _canUndo => _historyIndex > 0;
+  bool get _canRedo => _historyIndex < _history.length - 1;
+
+  Widget _historyButton({
+    required IconData icon,
+    required bool enabled,
+    required VoidCallback onTap,
+    required bool isTablet,
+  }) {
+    return Opacity(
+      opacity: enabled ? 1.0 : 0.35,
+      child: NeobrutalistButton(
+        size: isTablet ? 36.0 : 44.0,
+        backgroundColor: AppColors.surface,
+        onTap: enabled ? onTap : () {},
+        child: Icon(icon,
+            size: isTablet ? 18.0 : 22.0, color: AppColors.onBackground),
+      ),
+    );
+  }
+
+  Future<void> _surpriseMe() async {
+    final remix = await _aiService.generateSurpriseRemix(
+      widget.wizardState.creationType,
+      _generatedHtml,
+    );
+    if (!mounted) return;
+    setState(() => _followUps.add(remix));
+    _startGeneration();
+  }
+
+  Widget _surpriseChip(bool isTablet) {
+    return GestureDetector(
+      onTap: _isLoading ? null : _surpriseMe,
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: isTablet ? 12.0 : 16.0,
+          vertical: isTablet ? 6.0 : 8.0,
+        ),
+        decoration: BoxDecoration(
+          color: AppColors.secondaryContainer,
+          borderRadius: BorderRadius.circular(isTablet ? 18.0 : 22.0),
+          border: Border.all(
+              color: AppColors.onBackground, width: isTablet ? 2.0 : 3.0),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.onBackground,
+              offset: Offset(isTablet ? 2.0 : 3.0, isTablet ? 2.0 : 3.0),
+              blurRadius: 0,
+            ),
+          ],
+        ),
+        child: Text(
+          '🎲 Surprise Me!',
+          style: GoogleFonts.lexend(
+            fontSize: isTablet ? 12.0 : 14.0,
+            fontWeight: FontWeight.w800,
+            color: AppColors.onSecondaryContainer,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _remixChip(String label, bool isTablet) {
+    return GestureDetector(
+      onTap: _isLoading ? null : () {
+        setState(() => _followUps.add(label));
+        _startGeneration();
+      },
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: isTablet ? 12.0 : 16.0,
+          vertical: isTablet ? 6.0 : 8.0,
+        ),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(isTablet ? 18.0 : 22.0),
+          border: Border.all(
+              color: AppColors.onBackground, width: isTablet ? 2.0 : 3.0),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.onBackground,
+              offset: Offset(isTablet ? 2.0 : 3.0, isTablet ? 2.0 : 3.0),
+              blurRadius: 0,
+            ),
+          ],
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.lexend(
+            fontSize: isTablet ? 12.0 : 14.0,
+            fontWeight: FontWeight.w700,
+            color: AppColors.onBackground,
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _summarizeWhatIBuilt() {
+    final p = widget.parsedInput;
+    final a = widget.wizardState.answers;
+    final hero = p?.hero ?? a[0] ?? '';
+    final world = p?.world ?? a[1] ?? '';
+    final mood = p?.mood ?? a[2] ?? '';
+    final extras = (p != null && p.extras.isNotEmpty)
+        ? p.extras.join(', ')
+        : (a[3] ?? '');
+
+    final parts = <String>[];
+    if (hero.isNotEmpty) parts.add(hero);
+    if (world.isNotEmpty) parts.add('in $world');
+    if (mood.isNotEmpty) parts.add('($mood)');
+    final base = parts.join(' ');
+
+    final extra = extras.isNotEmpty ? ' + $extras' : '';
+    final follow = _followUps.isNotEmpty
+        ? ' → ${_followUps.last}'
+        : '';
+    return base + extra + follow;
+  }
+
+  Widget _whatIBuiltBubble(bool isTablet) {
+    final summary = _summarizeWhatIBuilt();
+    if (summary.trim().isEmpty) return const SizedBox.shrink();
+
+    return AnimatedBuilder(
+      animation: AppSettings.instance,
+      builder: (context, _) {
+        final builderOn = AppSettings.instance.builderMode;
+        return Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: isTablet ? 14.0 : 16.0,
+            vertical: isTablet ? 10.0 : 12.0,
+          ),
+          decoration: BoxDecoration(
+            color: AppColors.tertiaryContainer,
+            borderRadius: BorderRadius.circular(isTablet ? 14.0 : 18.0),
+            border: Border.all(
+                color: AppColors.onBackground, width: isTablet ? 2.0 : 2.5),
+          ),
+          child: Row(
+            children: [
+              const Text('🤖', style: TextStyle(fontSize: 22)),
+              SizedBox(width: isTablet ? 8.0 : 10.0),
+              Expanded(
+                child: RichText(
+                  text: TextSpan(
+                    style: GoogleFonts.lexend(
+                      fontSize: isTablet ? 12.0 : 14.0,
+                      color: AppColors.onBackground,
+                    ),
+                    children: [
+                      TextSpan(
+                        text: 'I built: ',
+                        style: GoogleFonts.lexend(
+                          fontWeight: FontWeight.w800,
+                          fontSize: isTablet ? 12.0 : 14.0,
+                          color: AppColors.onBackground,
+                        ),
+                      ),
+                      TextSpan(text: summary),
+                    ],
+                  ),
+                ),
+              ),
+              if (builderOn && _generatedHtml.isNotEmpty)
+                GestureDetector(
+                  onTap: _showPeekInside,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                          color: AppColors.onBackground, width: 2),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.code,
+                            size: 14, color: AppColors.onBackground),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Peek',
+                          style: GoogleFonts.lexend(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.onBackground,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showPeekInside() {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: AppColors.background,
+        insetPadding: const EdgeInsets.all(24),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: const BorderSide(color: AppColors.onBackground, width: 4),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Text('🔧', style: TextStyle(fontSize: 28)),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'How I built it',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                        color: AppColors.onBackground,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'This is the actual code that runs your creation. Real websites are built like this!',
+                style: GoogleFonts.lexend(
+                  fontSize: 13,
+                  color: AppColors.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Container(
+                constraints: const BoxConstraints(maxHeight: 400),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E1E1E),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                      color: AppColors.onBackground, width: 2.5),
+                ),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(14),
+                  child: SelectableText(
+                    _generatedHtml,
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 11.5,
+                      color: Color(0xFFE0E0E0),
+                      height: 1.45,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Text(
+                    '${_generatedHtml.length} characters',
+                    style: GoogleFonts.lexend(
+                      fontSize: 12,
+                      color: AppColors.onSurfaceVariant,
+                    ),
+                  ),
+                  const Spacer(),
+                  TextButton.icon(
+                    icon: const Icon(Icons.copy, size: 16),
+                    label: const Text('Copy'),
+                    onPressed: () {
+                      Clipboard.setData(
+                          ClipboardData(text: _generatedHtml));
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        const SnackBar(
+                          content: Text('Copied! Paste it anywhere ✨'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPreview() {
+    if (_isImageMode) {
+      if (_generatedImage == null) {
+        return Container(color: AppColors.surfaceVariant);
+      }
+      final isColoring = widget.wizardState.format == OutputFormat.coloring;
+      return Container(
+        color: isColoring ? Colors.white : AppColors.surfaceVariant,
+        child: Image.memory(_generatedImage!, fit: BoxFit.contain),
+      );
+    }
+    if (_generatedHtml.isEmpty) {
+      return Container(color: AppColors.surfaceVariant);
+    }
+    if (kIsWeb) {
+      return html_renderer.buildHtmlView(
+        _generatedHtml,
+        'kapoof-preview-${_generatedHtml.hashCode}',
+      );
+    }
+    if (_previewController == null) {
+      return Container(color: AppColors.surfaceVariant);
+    }
+    return WebViewWidget(controller: _previewController!);
   }
 
   void _showError(dynamic e) {
@@ -367,15 +808,39 @@ class _ResultScreenState extends State<ResultScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          "Look what you made! ✨",
-          style: GoogleFonts.plusJakartaSans(
-            fontSize: isTablet ? 20.0 : 28.0,
-            fontWeight: FontWeight.w800,
-            color: AppColors.onBackground,
-          ),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                "Look what you made! ✨",
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: isTablet ? 20.0 : 28.0,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.onBackground,
+                ),
+              ),
+            ),
+            _historyButton(
+              icon: Icons.undo,
+              enabled: _canUndo,
+              onTap: () => _restoreVersion(_historyIndex - 1),
+              isTablet: isTablet,
+            ),
+            SizedBox(width: isTablet ? 6.0 : 8.0),
+            _historyButton(
+              icon: Icons.redo,
+              enabled: _canRedo,
+              onTap: () => _restoreVersion(_historyIndex + 1),
+              isTablet: isTablet,
+            ),
+          ],
         ),
-        SizedBox(height: isTablet ? 16.0 : 20.0),
+        SizedBox(height: isTablet ? 12.0 : 14.0),
+
+        if (_generatedHtml.isNotEmpty || _generatedImage != null)
+          _whatIBuiltBubble(isTablet),
+
+        SizedBox(height: isTablet ? 12.0 : 14.0),
 
         // Preview area
         AspectRatio(
@@ -401,9 +866,40 @@ class _ResultScreenState extends State<ResultScreen>
               children: [
                 ClipRRect(
                   borderRadius: BorderRadius.circular(isTablet ? 14.0 : 17.0),
-                  child: _thumbnailBytes != null
-                      ? Image.memory(_thumbnailBytes!, fit: BoxFit.cover)
-                      : Container(color: AppColors.surfaceVariant),
+                  child: _buildPreview(),
+                ),
+                IgnorePointer(
+                  child: AnimatedBuilder(
+                    animation: _kapoofController,
+                    builder: (context, _) {
+                      final v = _kapoofController.value;
+                      if (v == 0 || v == 1) return const SizedBox.shrink();
+                      final scale = 0.6 + v * 1.8;
+                      final opacity = (1 - v).clamp(0.0, 1.0);
+                      return Center(
+                        child: Opacity(
+                          opacity: opacity,
+                          child: Transform.scale(
+                            scale: scale,
+                            child: Text(
+                              'KAPOOF! ✨',
+                              style: GoogleFonts.fredoka(
+                                fontSize: 56,
+                                fontWeight: FontWeight.w900,
+                                color: AppColors.secondary,
+                                shadows: const [
+                                  Shadow(
+                                      blurRadius: 20,
+                                      color: Colors.white,
+                                      offset: Offset(0, 0)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                 ),
                 if (_isLoading)
                   Container(
@@ -478,6 +974,29 @@ class _ResultScreenState extends State<ResultScreen>
               }).toList(),
             ),
           ),
+
+        // Quick Remix chips
+        if (!_isLoading && _generatedHtml.isNotEmpty) ...[
+          SizedBox(
+            height: isTablet ? 40.0 : 44.0,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                Padding(
+                  padding: EdgeInsets.only(right: isTablet ? 6.0 : 8.0),
+                  child: _surpriseChip(isTablet),
+                ),
+                ..._remixSuggestions().map((s) {
+                  return Padding(
+                    padding: EdgeInsets.only(right: isTablet ? 6.0 : 8.0),
+                    child: _remixChip(s, isTablet),
+                  );
+                }),
+              ],
+            ),
+          ),
+          SizedBox(height: isTablet ? 8.0 : 10.0),
+        ],
 
         // Magic Wand Input
         Container(
@@ -579,6 +1098,8 @@ class _ResultScreenState extends State<ResultScreen>
                                 builder: (context) => PlayScreen(
                                   htmlContent: _generatedHtml,
                                   creationType: widget.wizardState.creationType,
+                                  imageBytes: _generatedImage,
+                                  format: widget.wizardState.format,
                                 ),
                               ),
                             );
@@ -611,4 +1132,10 @@ class _ResultScreenState extends State<ResultScreen>
       ],
     );
   }
+}
+
+class _Version {
+  final String html;
+  final List<String> followUps;
+  _Version(this.html, this.followUps);
 }
